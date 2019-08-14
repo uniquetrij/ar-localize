@@ -1,31 +1,25 @@
 package com.infy.estquido;
 
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.PorterDuff;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
-import android.widget.ImageView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.couchbase.lite.CouchbaseLiteException;
 import com.couchbase.lite.Database;
-import com.couchbase.lite.DatabaseConfiguration;
-import com.couchbase.lite.Document;
 import com.couchbase.lite.MutableArray;
 import com.couchbase.lite.MutableDocument;
 import com.google.ar.core.Anchor;
-import com.google.ar.core.HitResult;
-import com.google.ar.core.Plane;
 import com.google.ar.core.Pose;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.Camera;
+import com.google.ar.sceneform.HitTestResult;
+import com.google.ar.sceneform.Node;
+import com.google.ar.sceneform.Scene;
+import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.rendering.MaterialFactory;
 import com.google.ar.sceneform.rendering.ModelRenderable;
@@ -33,8 +27,9 @@ import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
 import com.google.ar.sceneform.ux.TransformableNode;
 
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class CheckpointsActivity extends AppCompatActivity {
 
@@ -49,54 +44,21 @@ public class CheckpointsActivity extends AppCompatActivity {
     private MutableDocument mutableDoc;
     private int counter;
 
+    private Map<Node, WayPoint> nodes = new HashMap<>();
+
+    private Node selected;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkpoints);
-
         mArFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.checkpoints_fragment);
 
         mArFragment.getArSceneView().getScene().addOnUpdateListener(frameTime -> {
             Camera mARCamera = mArFragment.getArSceneView().getScene().getCamera();
             mLocalPosition = mARCamera.getLocalPosition();
         });
-
-        DatabaseConfiguration config = new DatabaseConfiguration(getApplicationContext());
-        try {
-            database = new Database(DB_NAME, config);
-            Document docoment = database.getDocument("b32");
-
-            if (docoment == null) {
-                mutableDoc = new MutableDocument("b32");
-                mutableDoc.setValue("checkpoints", new MutableArray());
-                database.save(mutableDoc);
-            } else {
-                mutableDoc = docoment.toMutable();
-            }
-        } catch (CouchbaseLiteException e) {
-            Log.e(TAG, e.toString());
-            e.printStackTrace();
-        }
-        Log.d("reading database on create", ((MutableArray) mutableDoc.getValue("checkpoints")).toList().toString());
-        ////LOG/////////////////
-//        runOnUiThread(new Runnable() {
-//            @Override
-//            public void run() {
-//                MutableArray checkpoints = (MutableArray) mutableDoc.getValue("checkpoints");
-//                mutableDoc.getValue("checkpoints");
-//                Toast.makeText(getApplicationContext(),mutableDoc.getArray("checkpoints").toString()+"",Toast.LENGTH_LONG).show();
-//            }
-//        });
-
-
-        //////////////////////
-
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
     }
 
     public void addWayPoint(View view) {
@@ -107,36 +69,81 @@ public class CheckpointsActivity extends AppCompatActivity {
                     AnchorNode anchorNode = new AnchorNode(anchor);
                     anchorNode.setParent(mArFragment.getArSceneView().getScene());
 
-                    // Create the transformable andy and add it to the anchor.
-                    TransformableNode andy = new TransformableNode(mArFragment.getTransformationSystem());
-                    andy.setParent(anchorNode);
-                    andy.setRenderable(modelRenderable);
-                    andy.select();
+                    Node node = new Node();
+                    node.setParent(anchorNode);
+                    node.setRenderable(modelRenderable);
 
-                    HashMap<String, Object> map = new HashMap<>();
-                    map.put("x", mLocalPosition.x);
-                    map.put("z", mLocalPosition.z);
-                    String id = String.valueOf(++counter);
+                    nodes.put(node, new WayPoint(++counter + "", node.getLocalPosition()));
 
-                    MutableArray checkpoints = (MutableArray) mutableDoc.getValue("checkpoints");
-                    checkpoints.addValue(map);
-                    mutableDoc.setValue("checkpoints", checkpoints);
-                    try {
-                        database.save(mutableDoc);
-                        Log.d(TAG, mutableDoc.getArray("checkpoints").toString() + "");
+                    node.setOnTapListener(new Node.OnTapListener() {
+                        @Override
+                        public void onTap(HitTestResult hitTestResult, MotionEvent motionEvent) {
+                            WayPoint wayPoint = nodes.get(node);
+                            if (!wayPoint.isSelected()) {
+                                wayPoint.setSelected(true);
+                                node.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.BLUE));
+                                if (selected == null) {
+                                    selected = node;
+                                }
+                                else{
 
-                    } catch (CouchbaseLiteException e) {
-                        Log.e(TAG, e.toString());
-                        e.printStackTrace();
-                    }
+                                }
+                            } else {
+                                wayPoint.setSelected(false);
+                                node.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
+                                selected = null;
+                            }
+                        }
+                    });
+
+
                 });
 
-//        Toast.makeText(getApplicationContext(), mLocalPosition.x + ", " + mLocalPosition.y + ", " + mLocalPosition.z, Toast.LENGTH_LONG).show();
-//        Log.d(TAG, mLocalPosition.x + ", " + mLocalPosition.y + ", " + mLocalPosition.z);
-//        Log.d(TAG, mArFragment.getArSceneView().getSession().getAllAnchors().size() + "");
-
-
     }
+
+    private void addLineBetweenPoints(Scene scene, Vector3 from, Vector3 to) {
+        // prepare an anchor position
+        Quaternion camQ = scene.getCamera().getWorldRotation();
+        float[] f1 = new float[]{to.x, to.y, to.z};
+        float[] f2 = new float[]{camQ.x, camQ.y, camQ.z, camQ.w};
+        Pose anchorPose = new Pose(f1, f2);
+
+        // make an ARCore Anchor
+        Anchor anchor = mCallback.getSession().createAnchor(anchorPose);
+        // Node that is automatically positioned in world space based on the ARCore Anchor.
+        AnchorNode anchorNode = new AnchorNode(anchor);
+        anchorNode.setParent(scene);
+
+        // Compute a line's length
+        float lineLength = Vector3.subtract(from, to).length();
+
+        // Prepare a color
+        Color colorOrange = new Color(android.graphics.Color.parseColor("#ffa71c"));
+
+        // 1. make a material by the color
+        MaterialFactory.makeOpaqueWithColor(getContext(), colorOrange)
+                .thenAccept(material -> {
+                    // 2. make a model by the material
+                    ModelRenderable model = ShapeFactory.makeCylinder(0.0025f, lineLength,
+                            new Vector3(0f, lineLength / 2, 0f), material);
+                    model.setShadowReceiver(false);
+                    model.setShadowCaster(false);
+
+                    // 3. make node
+                    Node node = new Node();
+                    node.setRenderable(model);
+                    node.setParent(anchorNode);
+
+                    // 4. set rotation
+                    final Vector3 difference = Vector3.subtract(to, from);
+                    final Vector3 directionFromTopToBottom = difference.normalized();
+                    final Quaternion rotationFromAToB =
+                            Quaternion.lookRotation(directionFromTopToBottom, Vector3.up());
+                    node.setWorldRotation(Quaternion.multiply(rotationFromAToB,
+                            Quaternion.axisAngle(new Vector3(1.0f, 0.0f, 0.0f), 90)));
+                });
+    }
+
 
     public void syncOrigin(View view) {
         mCalibPose.set(mLocalPosition);
