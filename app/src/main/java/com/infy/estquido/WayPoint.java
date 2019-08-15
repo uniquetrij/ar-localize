@@ -1,10 +1,14 @@
 package com.infy.estquido;
 
+import androidx.annotation.NonNull;
+
 import com.google.ar.sceneform.Node;
 import com.google.ar.sceneform.math.Vector3;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,10 +28,6 @@ public class WayPoint {
 
     public String getId() {
         return id;
-    }
-
-    public void setNode(Node node) {
-        this.node = node;
     }
 
     public Node getNode() {
@@ -50,13 +50,22 @@ public class WayPoint {
         return position;
     }
 
-    public Map<String, Object> toMap(){
-        Map<String,Object> map = new HashMap<>();
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new HashMap<>();
         map.put("id", id);
         map.put("x", position.x);
         map.put("y", position.y);
         map.put("z", position.z);
-
+        List<String> list = new ArrayList<>();
+        connections.stream().forEachOrdered(x ->
+                list.add(x.id));
+        map.put("connections", list);
         return map;
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        return toMap().toString();
     }
 }
