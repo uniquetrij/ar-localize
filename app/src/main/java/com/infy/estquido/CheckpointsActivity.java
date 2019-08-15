@@ -34,6 +34,7 @@ import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Dictionary;
@@ -55,6 +56,8 @@ public class CheckpointsActivity extends AppCompatActivity {
 
     private ArFragment mArFragment;
     private Vector3 mCamPosition;
+    private Vector3 calibPosition = Vector3.zero();
+
 
 
     private Set<WayPoint> mWayPoints = Collections.synchronizedSet(new LinkedHashSet<>());
@@ -63,6 +66,8 @@ public class CheckpointsActivity extends AppCompatActivity {
     private int wayPointCounter = 0;
     private Database database;
     private MutableDocument document;
+    private Quaternion mCamRotation;
+
 
 
     @Override
@@ -75,7 +80,8 @@ public class CheckpointsActivity extends AppCompatActivity {
 
         mArFragment.getArSceneView().getScene().addOnUpdateListener(frameTime -> {
             Camera mARCamera = mArFragment.getArSceneView().getScene().getCamera();
-            mCamPosition = mARCamera.getWorldPosition();
+            mCamPosition = mARCamera.getLocalPosition();
+            mCamRotation = mARCamera.getLocalRotation();
         });
     }
 
@@ -88,18 +94,30 @@ public class CheckpointsActivity extends AppCompatActivity {
             if (doc == null) {
                 document = new MutableDocument("B32F0");
                 document.setValue("WayPoints", new ArrayList<Map<String, Object>>());
-                document.setValue("WayPointIDs", new ArrayList<Integer>());
+                document.setValue("WayPointIDs", new ArrayList<Integer>(Arrays.asList(0)));
                 database.save(document);
             } else {
                 document = doc.toMutable();
+                Map<Integer, WayPoint> newWayPoints = Collections.synchronizedMap(new LinkedHashMap<>());
                 ((MutableArray) document.getValue("WayPoints")).toList().stream().forEachOrdered(m -> {
                     Map<String, Map<String, Object>> map = (Map<String, Map<String, Object>>) m;
                     Map<String, Object> wpMap = map.values().stream().findFirst().get();
                     WayPoint wayPoint = new WayPoint(((Long) wpMap.get("id")).intValue(), new Vector3((float) wpMap.get("x"), (float) wpMap.get("y"), (float) wpMap.get("z")));
                     mWayPoints.add(wayPoint);
+                    newWayPoints.put(wayPoint.getId(), wayPoint);
                 });
                 wayPointCounter = ((MutableArray) document.getValue("WayPointIDs")).toList().stream().mapToInt(value -> ((Long) value).intValue()).max().getAsInt();
 
+                ((MutableArray) document.getValue("WayPoints")).toList().stream().forEachOrdered(m -> {
+                    Map<String, Map<String, Object>> map = (Map<String, Map<String, Object>>) m;
+                    Map<String, Object> wpMap = map.values().stream().findFirst().get();
+                    List<Long> connections = (List<Long>) wpMap.get("connections");
+                    connections.stream().forEachOrdered(id->{
+                        newWayPoints.get(((Long) wpMap.get("id")).intValue()).getConnections().add(newWayPoints.get(((Long)id).intValue()));
+                        newWayPoints.get(((Long) id).intValue()).getConnections().add(newWayPoints.get(((Long)wpMap.get("id")).intValue()));
+                    });
+
+                });
 
             }
         } catch (CouchbaseLiteException e) {
@@ -110,7 +128,6 @@ public class CheckpointsActivity extends AppCompatActivity {
         Log.d("DATABASE", ((MutableArray) document.getValue("WayPoints")).toList().toString());
         Log.d("DATABASE", mWayPoints.toString());
     }
-
 
 
     public void placeWayPoint(View view) {
@@ -231,6 +248,8 @@ public class CheckpointsActivity extends AppCompatActivity {
     }
 
     public void persistWayPoints(View view) {
+        if(mWayPoints.isEmpty())
+            return;
         List<Map<String, Object>> wpArray = new ArrayList<>();
         List<Integer> idArray = new ArrayList<>();
         mWayPoints.stream().forEachOrdered(wayPoint -> {
@@ -247,5 +266,22 @@ public class CheckpointsActivity extends AppCompatActivity {
         } catch (CouchbaseLiteException e) {
             e.printStackTrace();
         }
+    }
+
+    public void reset(View view) {
+        mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
+        mWayPoints.clear();
+        document.setValue("WayPoints", new ArrayList<Map<String, Object>>());
+        document.setValue("WayPointIDs", new ArrayList<Integer>(Arrays.asList(0)));
+        try {
+            database.save(document);
+        } catch (CouchbaseLiteException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void calib(View view) {
+        calibPosition = mCamPosition;
+
     }
 }
