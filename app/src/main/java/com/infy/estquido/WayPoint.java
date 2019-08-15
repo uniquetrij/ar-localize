@@ -13,20 +13,21 @@ import java.util.Map;
 import java.util.Set;
 
 public class WayPoint {
-    private String id;
+    private int id;
     private Node node;
     private Vector3 position;
     private Set<WayPoint> connections;
     private boolean isSelected;
+    private String type;
 
-    public WayPoint(String id, Vector3 position) {
+    public WayPoint(int id, Vector3 position) {
         this.id = id;
         this.position = position;
         this.node = new Node();
         this.connections = new HashSet<>();
     }
 
-    public String getId() {
+    public Integer getId() {
         return id;
     }
 
@@ -56,7 +57,8 @@ public class WayPoint {
         map.put("x", position.x);
         map.put("y", position.y);
         map.put("z", position.z);
-        List<String> list = new ArrayList<>();
+        map.put("type", type);
+        List<Integer> list = new ArrayList<>();
         connections.stream().forEachOrdered(x ->
                 list.add(x.id));
         map.put("connections", list);

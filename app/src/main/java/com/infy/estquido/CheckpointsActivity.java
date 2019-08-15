@@ -2,14 +2,26 @@ package com.infy.estquido;
 
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.GenericLifecycleObserver;
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleOwner;
 
+import com.couchbase.lite.CouchbaseLiteException;
+import com.couchbase.lite.Database;
+import com.couchbase.lite.DatabaseConfiguration;
+import com.couchbase.lite.Document;
+import com.couchbase.lite.MutableArray;
+import com.couchbase.lite.MutableDocument;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Pose;
+import com.google.ar.core.Session;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.Camera;
 import com.google.ar.sceneform.HitTestResult;
@@ -21,11 +33,15 @@ import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
@@ -35,6 +51,7 @@ public class CheckpointsActivity extends AppCompatActivity {
 
 
     private static final String TAG = CheckpointsActivity.class.getName();
+    private static final String DB_NAME = "Estquido";
 
     private ArFragment mArFragment;
     private Vector3 mCamPosition;
@@ -43,13 +60,17 @@ public class CheckpointsActivity extends AppCompatActivity {
     private Set<WayPoint> mWayPoints = Collections.synchronizedSet(new LinkedHashSet<>());
     private WayPoint selectedWayPoint;
 
-    private int wayPointID = 0;
+    private int wayPointCounter = 0;
+    private Database database;
+    private MutableDocument document;
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkpoints);
+        initialiseDB();
+
         mArFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.checkpoints_fragment);
 
         mArFragment.getArSceneView().getScene().addOnUpdateListener(frameTime -> {
@@ -58,11 +79,45 @@ public class CheckpointsActivity extends AppCompatActivity {
         });
     }
 
-    public void placeWayPoint(View view) {
-        mWayPoints.add(addWayPoint(++wayPointID + "", mCamPosition));
+    private void initialiseDB() {
+        DatabaseConfiguration config = new DatabaseConfiguration(getApplicationContext());
+        try {
+            database = new Database(DB_NAME, config);
+            Document doc = database.getDocument("B32F0");
+
+            if (doc == null) {
+                document = new MutableDocument("B32F0");
+                document.setValue("WayPoints", new ArrayList<Map<String, Object>>());
+                document.setValue("WayPointIDs", new ArrayList<Integer>());
+                database.save(document);
+            } else {
+                document = doc.toMutable();
+                ((MutableArray) document.getValue("WayPoints")).toList().stream().forEachOrdered(m -> {
+                    Map<String, Map<String, Object>> map = (Map<String, Map<String, Object>>) m;
+                    Map<String, Object> wpMap = map.values().stream().findFirst().get();
+                    WayPoint wayPoint = new WayPoint(((Long) wpMap.get("id")).intValue(), new Vector3((float) wpMap.get("x"), (float) wpMap.get("y"), (float) wpMap.get("z")));
+                    mWayPoints.add(wayPoint);
+                });
+                wayPointCounter = ((MutableArray) document.getValue("WayPointIDs")).toList().stream().mapToInt(value -> ((Long) value).intValue()).max().getAsInt();
+
+
+            }
+        } catch (CouchbaseLiteException e) {
+            Log.e(TAG, e.toString());
+            e.printStackTrace();
+        }
+        Log.d("DATABASE", wayPointCounter + "");
+        Log.d("DATABASE", ((MutableArray) document.getValue("WayPoints")).toList().toString());
+        Log.d("DATABASE", mWayPoints.toString());
     }
 
-    private WayPoint addWayPoint(String id, Vector3 position) {
+
+
+    public void placeWayPoint(View view) {
+        mWayPoints.add(addWayPoint(++wayPointCounter, mCamPosition));
+    }
+
+    private WayPoint addWayPoint(Integer id, Vector3 position) {
         WayPoint wayPoint = new WayPoint(id, position);
         MaterialFactory.makeOpaqueWithColor(this, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")))
                 .thenAccept(material -> {
@@ -136,13 +191,16 @@ public class CheckpointsActivity extends AppCompatActivity {
                 );
     }
 
-
     public void syncPositions(View view) {
         view.setEnabled(false);
+        syncPositions();
+        view.setEnabled(true);
+    }
 
+    public void syncPositions() {
         mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
         Set<WayPoint> oldWP = Collections.synchronizedSet(new LinkedHashSet<>(mWayPoints));
-        Map<String, WayPoint> newWayPoints = Collections.synchronizedMap(new LinkedHashMap<>());
+        Map<Integer, WayPoint> newWayPoints = Collections.synchronizedMap(new LinkedHashMap<>());
         mWayPoints.clear();
 
         oldWP.stream().forEachOrdered(wayPoint -> {
@@ -164,18 +222,30 @@ public class CheckpointsActivity extends AppCompatActivity {
                                 }
                             });
                         });
-                        view.setEnabled(true);
                     }
                 });
             }
         }, 10);
 
-
         mWayPoints.addAll(newWayPoints.values());
-
-
     }
 
-    public void edge(View view) {
+    public void persistWayPoints(View view) {
+        List<Map<String, Object>> wpArray = new ArrayList<>();
+        List<Integer> idArray = new ArrayList<>();
+        mWayPoints.stream().forEachOrdered(wayPoint -> {
+            Map<String, Object> node = new LinkedHashMap<>();
+            Map<String, Object> map = wayPoint.toMap();
+            node.put(wayPoint.getId() + "", map);
+            wpArray.add(node);
+            idArray.add(wayPoint.getId());
+        });
+        document.setValue("WayPoints", wpArray);
+        document.setValue("WayPointIDs", idArray);
+        try {
+            database.save(document);
+        } catch (CouchbaseLiteException e) {
+            e.printStackTrace();
+        }
     }
 }
