@@ -26,7 +26,7 @@
         android:clickable="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        android:onClick="addWayPoint"
+        android:onClick="placeWayPoint"
         app:srcCompat="@android:drawable/ic_input_add" />
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -38,7 +38,7 @@
         android:clickable="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:onClick="syncOrigin"
+        android:onClick="syncPositions"
         app:srcCompat="@android:drawable/stat_notify_sync_noanim" />
 
 

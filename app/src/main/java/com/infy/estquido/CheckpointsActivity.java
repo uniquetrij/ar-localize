@@ -8,8 +8,6 @@ import android.view.View;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.couchbase.lite.Database;
-import com.couchbase.lite.MutableDocument;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Pose;
 import com.google.ar.sceneform.AnchorNode;
@@ -23,27 +21,25 @@ import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 public class CheckpointsActivity extends AppCompatActivity {
 
 
     private static final String TAG = CheckpointsActivity.class.getName();
-    private static final String DB_NAME = "CBDB";
 
     private ArFragment mArFragment;
-    private Vector3 position;
-    private Vector3 mCalibPose = new Vector3(0, 0, 0);
-    private Database database;
-    private MutableDocument mutableDoc;
+    private Vector3 mCamPosition;
     private int counter;
 
-    private Map<Node, WayPoint> nodes = new LinkedHashMap<>();
 
-    private Node selected;
+    //    private List<WayPoint> wayPoints = Collections.synchronizedList(new ArrayList<>());
+    private WayPoint selectedWayPoint;
 
 
     @Override
@@ -54,11 +50,17 @@ public class CheckpointsActivity extends AppCompatActivity {
 
         mArFragment.getArSceneView().getScene().addOnUpdateListener(frameTime -> {
             Camera mARCamera = mArFragment.getArSceneView().getScene().getCamera();
-            position = mARCamera.getWorldPosition();
+            mCamPosition = mARCamera.getWorldPosition();
         });
     }
 
-    public void addWayPoint(View view) {
+    public void placeWayPoint(View view) {
+        addWayPoint(++counter + "", mCamPosition);
+    }
+
+    private WayPoint addWayPoint(String id, Vector3 position) {
+        WayPoint wayPoint = new WayPoint(++counter + "", position);
+        wayPoint.setNode(new Node());
         MaterialFactory.makeOpaqueWithColor(this, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")))
                 .thenAccept(material -> {
                     ModelRenderable modelRenderable = ShapeFactory.makeSphere(0.1f, new Vector3(0.0f, 0.0f, 0.0f), material);
@@ -66,46 +68,46 @@ public class CheckpointsActivity extends AppCompatActivity {
                     AnchorNode anchorNode = new AnchorNode(anchor);
                     anchorNode.setParent(mArFragment.getArSceneView().getScene());
 
-                    Node node = new Node();
-                    node.setParent(anchorNode);
-                    node.setRenderable(modelRenderable);
-
-                    nodes.put(node, new WayPoint(++counter + "", new Vector3(position.x, position.y, position.z)));
-
-                    node.setOnTapListener(new Node.OnTapListener() {
+                    wayPoint.getNode().setParent(anchorNode);
+                    wayPoint.getNode().setRenderable(modelRenderable);
+                    wayPoint.getNode().setOnTapListener(new Node.OnTapListener() {
                         @Override
                         public void onTap(HitTestResult hitTestResult, MotionEvent motionEvent) {
-                            WayPoint wayPoint = nodes.get(node);
                             if (!wayPoint.isSelected()) {
-                                if (selected == null) {
+                                if (selectedWayPoint == null) {
                                     wayPoint.setSelected(true);
-                                    node.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.BLUE));
-                                    selected = node;
+                                    wayPoint.getNode().getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.BLUE));
+                                    selectedWayPoint = wayPoint;
                                 } else {
-                                    nodes.get(selected).setSelected(false);
-                                    if (!nodes.get(selected).getConnected().contains(nodes.get(node))) {
-                                        connectNodes(selected, node);
-                                    }
-
-                                    selected.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
-                                    nodes.get(selected).getConnected().add(nodes.get(node));
-                                    nodes.get(node).getConnected().add(nodes.get(selected));
-                                    selected = null;
+                                    selectedWayPoint.setSelected(false);
+                                    connectWayPoints(selectedWayPoint, wayPoint);
+                                    selectedWayPoint.getNode().getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
+                                    selectedWayPoint.getConnections().add(wayPoint);
+                                    wayPoint.getConnections().add(selectedWayPoint);
+                                    selectedWayPoint = null;
 
                                 }
                             } else {
                                 wayPoint.setSelected(false);
-                                node.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
-                                selected = null;
+                                wayPoint.getNode().getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
+                                selectedWayPoint = null;
                             }
                         }
                     });
                 });
+
+        return wayPoint;
     }
 
-    private void connectNodes(Node from, Node to) {
-        AnchorNode node1 = (AnchorNode) from.getParent();
-        AnchorNode node2 = (AnchorNode) to.getParent();
+    private void connectWayPoints(WayPoint from, WayPoint to) {
+        if (from.getConnections().contains(to))
+            return;
+
+        from.getConnections().add(to);
+        to.getConnections().add(from);
+
+        AnchorNode node1 = (AnchorNode) from.getNode().getParent();
+        AnchorNode node2 = (AnchorNode) to.getNode().getParent();
         Vector3 point1, point2;
         point1 = node1.getWorldPosition();
         point2 = node2.getWorldPosition();
@@ -116,7 +118,6 @@ public class CheckpointsActivity extends AppCompatActivity {
         MaterialFactory.makeOpaqueWithColor(getApplicationContext(), new com.google.ar.sceneform.rendering.Color(Color.RED))
                 .thenAccept(material -> {
                             ModelRenderable model = ShapeFactory.makeCube(new Vector3(0.025f, 0.025f, difference.length()), Vector3.zero(), material);
-                            Anchor anchor = node2.getAnchor();
                             Node node = new Node();
                             node.setParent(node1);
                             node.setRenderable(model);
@@ -127,8 +128,8 @@ public class CheckpointsActivity extends AppCompatActivity {
                                 @Override
                                 public void onTap(HitTestResult hitTestResult, MotionEvent motionEvent) {
                                     node.setParent(null);
-                                    nodes.get(from).getConnected().remove(nodes.get(node));
-                                    nodes.get(to).getConnected().remove(nodes.get(from));
+                                    from.getConnections().remove(to);
+                                    to.getConnections().remove(from);
                                 }
                             });
                         }
@@ -136,76 +137,27 @@ public class CheckpointsActivity extends AppCompatActivity {
     }
 
 
-    public void syncOrigin(View view) {
+    public void syncPositions(View view) {
 
-        Map<Node, WayPoint> tempNodes = new LinkedHashMap<>(this.nodes);
-        Map<WayPoint, Node> tempWP = new LinkedHashMap<>();
-        Set<WayPoint> visited = new HashSet<>();
-        nodes.clear();
-        selected = null;
-        mArFragment.getArSceneView().getSession().getAllAnchors().forEach(x -> x.detach());
+        Log.d("WAYPOINTS", wayPoints.toString());
+        mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
+        List<WayPoint> _wayPoints = Collections.synchronizedList(new ArrayList<>(wayPoints));
+        wayPoints.clear();
+        Log.d("WAYPOINTS", wayPoints.toString());
 
-        tempNodes.entrySet().forEach(entry -> {
-            Vector3 position = entry.getValue().getPosition();
-            MaterialFactory.makeOpaqueWithColor(this, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")))
-                    .thenAccept(material -> {
-                        ModelRenderable modelRenderable = ShapeFactory.makeSphere(0.1f, new Vector3(0.0f, 0.0f, 0.0f), material);
-                        Anchor anchor = mArFragment.getArSceneView().getSession().createAnchor(new Pose(new float[]{position.x, position.y, position.z}, new float[]{0, 0, 0, 0}));
-                        AnchorNode anchorNode = new AnchorNode(anchor);
-                        anchorNode.setParent(mArFragment.getArSceneView().getScene());
-
-                        Node node = new Node();
-                        node.setParent(anchorNode);
-                        node.setRenderable(modelRenderable);
-
-                        nodes.put(node, entry.getValue());
-                        tempWP.put(entry.getValue(), node);
-
-
-                        node.setOnTapListener(new Node.OnTapListener() {
-                            @Override
-                            public void onTap(HitTestResult hitTestResult, MotionEvent motionEvent) {
-                                WayPoint wayPoint = nodes.get(node);
-                                if (!wayPoint.isSelected()) {
-                                    if (selected == null) {
-                                        wayPoint.setSelected(true);
-                                        node.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.BLUE));
-                                        selected = node;
-                                    } else {
-                                        nodes.get(selected).setSelected(false);
-                                        if (!nodes.get(selected).getConnected().contains(nodes.get(node))) {
-                                            connectNodes(selected, node);
-                                        }
-                                        selected.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
-                                        nodes.get(selected).getConnected().add(nodes.get(node));
-                                        nodes.get(node).getConnected().add(nodes.get(selected));
-                                        selected = null;
-
-                                    }
-                                } else {
-                                    wayPoint.setSelected(false);
-                                    node.getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
-                                    selected = null;
-                                }
-                            }
-                        });
-                    });
-
-
+        _wayPoints.stream().forEachOrdered(wp -> {
+            addWayPoint(wp.getPosition());
         });
 
-        Log.d("ENTRY", nodes.values().toString());
+        _wayPoints.stream().forEachOrdered(wp -> {
+            int indexWP = _wayPoints.indexOf(wp);
+            wp.getConnections().stream().forEachOrdered(cwp -> {
+                int indexCWP = _wayPoints.indexOf(cwp);
+                connectWayPoints(wayPoints.get(indexWP), wayPoints.get(indexCWP));
+            });
+        });
 
-        for (Map.Entry<Node, WayPoint> entry : nodes.entrySet()) {
-            visited.add(entry.getValue());
-            for (WayPoint wayPoint : entry.getValue().getConnected()) {
-                if (visited.contains(wayPoint)) {
-                    continue;
-                }
-                connectNodes(entry.getKey(), tempWP.get(wayPoint));
-            }
-
-        }
+        Log.d("WAYPOINTS", wayPoints.toString());
 
 
     }
