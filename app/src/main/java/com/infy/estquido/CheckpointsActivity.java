@@ -2,7 +2,6 @@ package com.infy.estquido;
 
 import android.graphics.Color;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -21,11 +20,12 @@ import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
 
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class CheckpointsActivity extends AppCompatActivity {
@@ -35,11 +35,12 @@ public class CheckpointsActivity extends AppCompatActivity {
 
     private ArFragment mArFragment;
     private Vector3 mCamPosition;
-    private int counter;
 
 
-    //    private List<WayPoint> wayPoints = Collections.synchronizedList(new ArrayList<>());
+    private Set<WayPoint> mWayPoints = Collections.synchronizedSet(new LinkedHashSet<>());
     private WayPoint selectedWayPoint;
+
+    private int wayPointID = 0;
 
 
     @Override
@@ -55,12 +56,11 @@ public class CheckpointsActivity extends AppCompatActivity {
     }
 
     public void placeWayPoint(View view) {
-        addWayPoint(++counter + "", mCamPosition);
+        mWayPoints.add(addWayPoint(++wayPointID + "", mCamPosition));
     }
 
     private WayPoint addWayPoint(String id, Vector3 position) {
-        WayPoint wayPoint = new WayPoint(++counter + "", position);
-        wayPoint.setNode(new Node());
+        WayPoint wayPoint = new WayPoint(id, position);
         MaterialFactory.makeOpaqueWithColor(this, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")))
                 .thenAccept(material -> {
                     ModelRenderable modelRenderable = ShapeFactory.makeSphere(0.1f, new Vector3(0.0f, 0.0f, 0.0f), material);
@@ -82,8 +82,6 @@ public class CheckpointsActivity extends AppCompatActivity {
                                     selectedWayPoint.setSelected(false);
                                     connectWayPoints(selectedWayPoint, wayPoint);
                                     selectedWayPoint.getNode().getRenderable().getMaterial().setFloat3(MaterialFactory.MATERIAL_COLOR, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")));
-                                    selectedWayPoint.getConnections().add(wayPoint);
-                                    wayPoint.getConnections().add(selectedWayPoint);
                                     selectedWayPoint = null;
 
                                 }
@@ -95,7 +93,6 @@ public class CheckpointsActivity extends AppCompatActivity {
                         }
                     });
                 });
-
         return wayPoint;
     }
 
@@ -118,6 +115,7 @@ public class CheckpointsActivity extends AppCompatActivity {
         MaterialFactory.makeOpaqueWithColor(getApplicationContext(), new com.google.ar.sceneform.rendering.Color(Color.RED))
                 .thenAccept(material -> {
                             ModelRenderable model = ShapeFactory.makeCube(new Vector3(0.025f, 0.025f, difference.length()), Vector3.zero(), material);
+                            Anchor anchor = node2.getAnchor();
                             Node node = new Node();
                             node.setParent(node1);
                             node.setRenderable(model);
@@ -139,25 +137,27 @@ public class CheckpointsActivity extends AppCompatActivity {
 
     public void syncPositions(View view) {
 
-        Log.d("WAYPOINTS", wayPoints.toString());
         mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
-        List<WayPoint> _wayPoints = Collections.synchronizedList(new ArrayList<>(wayPoints));
-        wayPoints.clear();
-        Log.d("WAYPOINTS", wayPoints.toString());
+        Set<WayPoint> oldWP = Collections.synchronizedSet(new LinkedHashSet<>(mWayPoints));
+        Map<String, WayPoint> newWayPoints = new LinkedHashMap<>();
+        mWayPoints.clear();
 
-        _wayPoints.stream().forEachOrdered(wp -> {
-            addWayPoint(wp.getPosition());
+        oldWP.forEach(wayPoint -> {
+            newWayPoints.put(wayPoint.getId(), addWayPoint(wayPoint.getId(), wayPoint.getPosition()));
         });
 
-        _wayPoints.stream().forEachOrdered(wp -> {
-            int indexWP = _wayPoints.indexOf(wp);
-            wp.getConnections().stream().forEachOrdered(cwp -> {
-                int indexCWP = _wayPoints.indexOf(cwp);
-                connectWayPoints(wayPoints.get(indexWP), wayPoints.get(indexCWP));
+        Set<WayPoint> visited = new HashSet<>();
+
+        oldWP.stream().sequential().forEach(wayPoint -> {
+            visited.add(wayPoint);
+            wayPoint.getConnections().forEach(wayPoint1 -> {
+                if (!visited.contains(wayPoint1)) {
+                    connectWayPoints(newWayPoints.get(wayPoint.getId()), newWayPoints.get(wayPoint1.getId()));
+                }
             });
         });
 
-        Log.d("WAYPOINTS", wayPoints.toString());
+        mWayPoints.addAll(newWayPoints.values());
 
 
     }
