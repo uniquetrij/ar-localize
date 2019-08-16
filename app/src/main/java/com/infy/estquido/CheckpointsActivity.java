@@ -67,8 +67,9 @@ public class CheckpointsActivity extends AppCompatActivity {
     private Database database;
     private MutableDocument document;
     private Quaternion mCamRotation;
-
-
+    private Anchor anchor = null;
+    private Vector3 prevCamPosition = null;
+    private Quaternion prevCamRotation = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,10 +79,33 @@ public class CheckpointsActivity extends AppCompatActivity {
 
         mArFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.checkpoints_fragment);
 
+
         mArFragment.getArSceneView().getScene().addOnUpdateListener(frameTime -> {
             Camera mARCamera = mArFragment.getArSceneView().getScene().getCamera();
             mCamPosition = mARCamera.getLocalPosition();
             mCamRotation = mARCamera.getLocalRotation();
+
+
+
+
+            if (prevCamPosition == null & prevCamRotation == null ){
+                prevCamPosition = mCamPosition;
+                prevCamRotation = mCamRotation;
+            }
+
+            if (anchor == null & !prevCamRotation.equals(mCamRotation) && !prevCamPosition.equals(mCamPosition) ){
+                createAnchor(mCamPosition,mCamRotation);
+                Log.d("anchor pos",mCamPosition.toString());
+                Log.d("anchor pos",mCamRotation.toString());
+                Log.d("anchor pose",anchor.getPose().toString());
+
+            }
+            if(anchor == null){
+                prevCamPosition = mCamPosition;
+                prevCamRotation = mCamRotation;
+            }
+
+
         });
     }
 
@@ -132,15 +156,17 @@ public class CheckpointsActivity extends AppCompatActivity {
 
     public void placeWayPoint(View view) {
         mWayPoints.add(addWayPoint(++wayPointCounter, mCamPosition));
+        Log.d("anchor waypoints ",mWayPoints.toString());
     }
 
     private WayPoint addWayPoint(Integer id, Vector3 position) {
+
         WayPoint wayPoint = new WayPoint(id, position);
         MaterialFactory.makeOpaqueWithColor(this, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")))
                 .thenAccept(material -> {
-                    ModelRenderable modelRenderable = ShapeFactory.makeSphere(0.1f, new Vector3(0.0f, 0.0f, 0.0f), material);
-                    Anchor anchor = mArFragment.getArSceneView().getSession().createAnchor(new Pose(new float[]{position.x, position.y, position.z}, new float[]{0, 0, 0, 0}));
-                    AnchorNode anchorNode = new AnchorNode(anchor);
+                    ModelRenderable modelRenderable = ShapeFactory.makeSphere(0.1f, new Vector3(position.x,position.y,position.z), material);
+                    AnchorNode anchorNode = new AnchorNode();
+                    anchorNode.setAnchor(anchor);
                     anchorNode.setParent(mArFragment.getArSceneView().getScene());
 
                     wayPoint.getNode().setParent(anchorNode);
@@ -168,6 +194,7 @@ public class CheckpointsActivity extends AppCompatActivity {
                         }
                     });
                 });
+
         return wayPoint;
     }
 
@@ -180,11 +207,16 @@ public class CheckpointsActivity extends AppCompatActivity {
 
         AnchorNode node1 = (AnchorNode) from.getNode().getParent();
         AnchorNode node2 = (AnchorNode) to.getNode().getParent();
+
         Vector3 point1, point2;
-        point1 = node1.getWorldPosition();
-        point2 = node2.getWorldPosition();
+        point1 = from.getPosition();
+        point2 = to.getPosition();
+
+        Log.d("anchor connect point 1 ",point1.toString());
+        Log.d("anchor connect point 2 ",point2.toString());
 
         final Vector3 difference = Vector3.subtract(point1, point2);
+        Log.d("anchor connect diff ",difference.toString());
         final Vector3 directionFromTopToBottom = difference.normalized();
         final Quaternion rotationFromAToB = Quaternion.lookRotation(directionFromTopToBottom, Vector3.up());
         MaterialFactory.makeOpaqueWithColor(getApplicationContext(), new com.google.ar.sceneform.rendering.Color(Color.RED))
@@ -206,7 +238,16 @@ public class CheckpointsActivity extends AppCompatActivity {
                             });
                         }
                 );
+        Log.d("anchor waypoint after connection", mWayPoints.toString());
     }
+
+    public void createAnchor(Vector3 position, Quaternion rotation){
+        anchor = mArFragment.getArSceneView().getSession().createAnchor(new Pose(new float[]{0, 0, 0}, new float[]{0, 0, 0, -rotation.w}));
+        Log.d("anchor","anchor created at position "+position.toString());
+        Log.d("anchor","anchors so far " +mArFragment.getArSceneView().getSession().getAllAnchors().toString());
+
+    }
+
 
     public void syncPositions(View view) {
         view.setEnabled(false);
@@ -215,14 +256,20 @@ public class CheckpointsActivity extends AppCompatActivity {
     }
 
     public void syncPositions() {
-        mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
+//        Log.d("anchorsync before detach",mArFragment.getArSceneView().getSession().getAllAnchors().toString());
+//        mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
+//        Log.d("anchorsync after detach",mArFragment.getArSceneView().getSession().getAllAnchors().toString());
+
+//        createAnchor(mCamPosition);
         Set<WayPoint> oldWP = Collections.synchronizedSet(new LinkedHashSet<>(mWayPoints));
         Map<Integer, WayPoint> newWayPoints = Collections.synchronizedMap(new LinkedHashMap<>());
+        Log.d("anchor sync",oldWP.toString());
         mWayPoints.clear();
 
         oldWP.stream().forEachOrdered(wayPoint -> {
             newWayPoints.put(wayPoint.getId(), addWayPoint(wayPoint.getId(), wayPoint.getPosition()));
         });
+        Log.d("anchorsync",newWayPoints.toString());
 
         new Timer().schedule(new TimerTask() {
             @Override
@@ -275,6 +322,7 @@ public class CheckpointsActivity extends AppCompatActivity {
         document.setValue("WayPointIDs", new ArrayList<Integer>(Arrays.asList(0)));
         try {
             database.save(document);
+
         } catch (CouchbaseLiteException e) {
             e.printStackTrace();
         }
