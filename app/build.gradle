@@ -36,4 +36,8 @@ dependencies {
     implementation 'com.google.android.material:material:1.0.0'
 
     implementation 'com.couchbase.lite:couchbase-lite-android:2.5.3'
+
+    // https://mvnrepository.com/artifact/org.apache.commons/commons-collections4
+    implementation group: 'org.apache.commons', name: 'commons-collections4', version: '4.4'
+
 }

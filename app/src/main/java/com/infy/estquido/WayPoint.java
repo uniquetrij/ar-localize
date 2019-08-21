@@ -16,6 +16,7 @@ public class WayPoint {
     private int id;
     private String wayPointName = null;
     private boolean isCheckpoint = false;
+    private Map<String, List<String>> checkpointsPath;
     private Node node;
     private Vector3 position;
     private Set<WayPoint> connections;
@@ -30,8 +31,6 @@ public class WayPoint {
         this.node = new Node();
         this.connections = new HashSet<>();
     }
-
-
 
     public Integer getId() {
         return id;
@@ -57,11 +56,15 @@ public class WayPoint {
         return position;
     }
 
-    public boolean getIsCheckpoint(){ return this.isCheckpoint; }
+    public boolean getIsCheckpoint() {
+        return this.isCheckpoint;
+    }
 
-    public String getWayPointName() { return wayPointName; }
+    public String getWayPointName() {
+        return wayPointName;
+    }
 
-    public void setIsCheckpoint(boolean isCheckpoint){
+    public void setIsCheckpoint(boolean isCheckpoint) {
         this.isCheckpoint = isCheckpoint;
     }
 
@@ -72,22 +75,29 @@ public class WayPoint {
     public Map<String, Object> toMap() {
         Map<String, Object> map = new HashMap<>();
         map.put("id", id);
-        map.put("wayPointName",wayPointName);
-        map.put("isCheckpoint",isCheckpoint);
+        map.put("wayPointName", wayPointName);
+        map.put("isCheckpoint", isCheckpoint);
         map.put("x", position.x);
         map.put("y", position.y);
         map.put("z", position.z);
         map.put("type", type);
+
         List<String> list = new ArrayList<>();
-        connections.stream().forEachOrdered(x ->
-                list.add(x.wayPointName));
+        connections.stream().forEachOrdered(x -> list.add(x.wayPointName));
         map.put("connections", list);
+
+        map.put("routes", checkpointsPath);
+
         return map;
     }
 
-    @NonNull
-    @Override
-    public String toString() {
-        return toMap().toString();
+    public Map<String, List<String>> getCheckpointsPath() {
+        return checkpointsPath;
     }
+
+    public void setCheckpointsPath(Map<String, List<String>> checkpointsPath) {
+        this.checkpointsPath = checkpointsPath;
+    }
+
+
 }

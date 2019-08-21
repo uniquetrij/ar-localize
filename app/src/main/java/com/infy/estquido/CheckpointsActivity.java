@@ -72,7 +72,7 @@ public class CheckpointsActivity extends AppCompatActivity {
     private Set<WayPoint> mWayPoints = Collections.synchronizedSet(new LinkedHashSet<>());
     private WayPoint selectedWayPoint;
 
-    private int wayPointCounter = 0;
+    private int wayPointCounter = -1;
     private Database database;
     private MutableDocument document;
     private Quaternion mCamRotation;
@@ -138,6 +138,7 @@ public class CheckpointsActivity extends AppCompatActivity {
                     Map<String, Map<String, Object>> map = (Map<String, Map<String, Object>>) m;
                     Map<String, Object> wpMap = map.values().stream().findFirst().get();
                     WayPoint wayPoint = new WayPoint(((Long) wpMap.get("id")).intValue(), new Vector3((float) wpMap.get("x"), (float) wpMap.get("y"), (float) wpMap.get("z")), (String) wpMap.get("wayPointName"), (boolean) wpMap.get("isCheckpoint"));
+                    wayPoint.setCheckpointsPath((Map<String, List<String>>) wpMap.get("routes"));
                     mWayPoints.add(wayPoint);
                     newWayPoints.put(wayPoint.getWayPointName(), wayPoint);
                 });
@@ -337,24 +338,33 @@ public class CheckpointsActivity extends AppCompatActivity {
             return;
         List<Map<String, Object>> wpArray = new ArrayList<>();
         List<Integer> idArray = new ArrayList<>();
-        List<Map<String, Integer>> checkpointArray = new ArrayList<>();
+        Map<String, Integer> checkpointArray = new HashMap<>();
+
 
 
         mWayPoints.stream().forEachOrdered(wayPoint -> {
+            if(wayPoint.getIsCheckpoint()){
+                checkpointArray.put(wayPoint.getWayPointName(),wayPoint.getId());
+            }
+        });
+
+        List<WayPoint> wayPointsForDJS = new ArrayList<>(mWayPoints);
+
+        DijikstrasShortestPath djs = new DijikstrasShortestPath();
+        List<WayPoint> wayPointsDJS = djs.getShortestPaths(wayPointsForDJS,checkpointArray);
+
+        wayPointsDJS.stream().forEachOrdered(wayPoint -> {
+
             Map<String, Object> node = new LinkedHashMap<>();
             Map<String, Object> map = wayPoint.toMap();
-
-            if(wayPoint.getIsCheckpoint()){
-                Map<String, Integer> checkpointList = new HashMap<String, Integer>();
-                checkpointList.put(wayPoint.getWayPointName(),wayPoint.getId());
-                checkpointArray.add(checkpointList);
-            }
 
             node.put(wayPoint.getWayPointName(), map);
             wpArray.add(node);
             idArray.add(wayPoint.getId());
 
         });
+
+
         document.setValue("WayPoints", wpArray);
         document.setValue("WayPointIDs", idArray);
         document.setValue("CheckPoints", checkpointArray);
