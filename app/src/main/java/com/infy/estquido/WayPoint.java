@@ -14,18 +14,24 @@ import java.util.Set;
 
 public class WayPoint {
     private int id;
+    private String wayPointName = null;
+    private boolean isCheckpoint = false;
     private Node node;
     private Vector3 position;
     private Set<WayPoint> connections;
     private boolean isSelected;
     private String type;
 
-    public WayPoint(int id, Vector3 position) {
+    public WayPoint(int id, Vector3 position, String wayPointName, boolean isCheckpoint) {
         this.id = id;
+        this.wayPointName = wayPointName;
+        this.isCheckpoint = isCheckpoint;
         this.position = position;
         this.node = new Node();
         this.connections = new HashSet<>();
     }
+
+
 
     public Integer getId() {
         return id;
@@ -51,16 +57,30 @@ public class WayPoint {
         return position;
     }
 
+    public boolean getIsCheckpoint(){ return this.isCheckpoint; }
+
+    public String getWayPointName() { return wayPointName; }
+
+    public void setIsCheckpoint(boolean isCheckpoint){
+        this.isCheckpoint = isCheckpoint;
+    }
+
+    public void setWayPointName(String waypointName) {
+        this.wayPointName = waypointName;
+    }
+
     public Map<String, Object> toMap() {
         Map<String, Object> map = new HashMap<>();
         map.put("id", id);
+        map.put("wayPointName",wayPointName);
+        map.put("isCheckpoint",isCheckpoint);
         map.put("x", position.x);
         map.put("y", position.y);
         map.put("z", position.z);
         map.put("type", type);
-        List<Integer> list = new ArrayList<>();
+        List<String> list = new ArrayList<>();
         connections.stream().forEachOrdered(x ->
-                list.add(x.id));
+                list.add(x.wayPointName));
         map.put("connections", list);
         return map;
     }
