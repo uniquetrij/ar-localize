@@ -4,15 +4,14 @@ package com.infy.estquido;
 import android.util.Log;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import com.google.ar.sceneform.math.Vector3;
 
 import org.apache.commons.collections4.IterableUtils;
-import org.apache.commons.collections4.Predicate;
 
 
 public class DijikstrasShortestPath {
@@ -63,21 +62,21 @@ public class DijikstrasShortestPath {
         }
     }
 
-    public List<Integer> printSolution( int endVertex, int[] parents)
+    public List<Integer> getSolution(int endVertex, int[] parents)
     {
         List<Integer> path = new ArrayList<Integer>();
-        path = printPath(endVertex, parents, path);
+        path = getPath(endVertex, parents, path);
 
         return path;
 
     }
 
 
-    private List<Integer> printPath(int currentVertex, int[] parents, List<Integer> path) {
+    private List<Integer> getPath(int currentVertex, int[] parents, List<Integer> path) {
         if (currentVertex == NO_PARENT) {
             return path;
         }
-        printPath(parents[currentVertex], parents, path);
+        getPath(parents[currentVertex], parents, path);
         path.add(currentVertex);
         return path;
     }
@@ -98,17 +97,23 @@ public class DijikstrasShortestPath {
 
         for (int i = 0; i < wayPoints.size(); i++) {
             List<WayPoint> connections = new ArrayList<>(wayPoints.get(i).getConnections());
-
+            Vector3 a = wayPoints.get(i).getPosition();
             for (int j = 0; j < connections.size(); j++) {
 
-                Vector3 a = wayPoints.get(i).getPosition();
                 Vector3 b = connections.get(j).getPosition();
-
                 float cost = getCost(a, b);
-                int idx = wayPoints.indexOf(connections.get(j));
+                int idx;
+                for(int k=0; k<wayPoints.size();k++){
+                    if(connections.get(j).getWayPointName().equals(wayPoints.get(k).getWayPointName())){
+                        idx = k;
+                        adjmat[i][idx] = cost;
+                        adjmat[idx][i] = cost;
+                    }
+                }
 
-                adjmat[i][idx] = cost;
-                adjmat[idx][i] = cost;
+
+
+
 
             }
         }
@@ -120,6 +125,9 @@ public class DijikstrasShortestPath {
     public float[][] getAdjacencyMatrix() {
         return this.adjacencyMatrix;
     }
+
+
+
 
     private List<WayPoint> getPaths(List<WayPoint> wayPoints, List<WayPoint> checkpoints, List<Integer> checkPointIds) {
 
@@ -135,11 +143,9 @@ public class DijikstrasShortestPath {
 
                         int startVertex = checkPointIds.get(i);
                         int endVertex = checkPointIds.get(j);
-
                         dijkstra(startVertex, endVertex);
 
-                        List<Integer> path = printSolution(endVertex, parents);
-
+                        List<Integer> path = getSolution(endVertex, parents);
                         Map<String, List<String>> map = new HashMap<>();
                         List<String> nodePoints = new ArrayList<>();
 
@@ -151,7 +157,10 @@ public class DijikstrasShortestPath {
                             WayPoint wayPoint = wayPoints.get(IterableUtils.indexOf(wayPoints, object -> object.getId().equals(finalPath.get(finalK))));
                             nodePoints.add(wayPoint.getWayPointName());
 
+
                         }
+
+
                         ckptconnected.put(checkpoints.get(j).getWayPointName(), nodePoints);
 
                     }
@@ -172,11 +181,10 @@ public class DijikstrasShortestPath {
     }
 
 
-    public List<WayPoint> getShortestPaths(List<WayPoint> wayPoints, Map<String, Integer> checkPointsList) {
+    public List<WayPoint> getAllShortestPaths(List<WayPoint> wayPoints, Map<String, Integer> checkPointsList) {
 
         createAdjacencyMatrix(wayPoints);
 
-        Log.d("checkpointList", checkPointsList.toString());
 
         List<WayPoint> checkpoints = new ArrayList<WayPoint>();
         List<Integer> checkpointIds = new ArrayList<Integer>();
@@ -190,6 +198,44 @@ public class DijikstrasShortestPath {
 
 
     }
+
+    public List<WayPoint> getShortestPath(List<WayPoint> wayPoints, String src, String dst){
+
+        createAdjacencyMatrix(wayPoints);
+
+        WayPoint srcWayPoint = wayPoints.get(IterableUtils.indexOf(wayPoints, object -> object.getWayPointName().equalsIgnoreCase(src)));
+        WayPoint dstWayPoint = wayPoints.get(IterableUtils.indexOf(wayPoints, object -> object.getWayPointName().equalsIgnoreCase(dst)));
+
+        dijkstra(srcWayPoint.getId(), dstWayPoint.getId());
+
+        List<Integer> path = getSolution(dstWayPoint.getId(), parents);
+
+
+        Map<String, List<String>> map_src = new HashMap<>();
+        List<String> nodePoints_src = new ArrayList<>();
+        Map<String, List<String>> map_dst = new HashMap<>();
+
+
+        for (int k = 0; k < path.size(); k++) {
+
+            List<Integer> finalPath = path;
+            int finalK = k;
+            WayPoint wayPoint = wayPoints.get(IterableUtils.indexOf(wayPoints, object -> object.getId().equals(finalPath.get(finalK))));
+            nodePoints_src.add(wayPoint.getWayPointName());
+
+        }
+        List<String> nodePoints_dst = new ArrayList<String>(nodePoints_src);
+        Collections.reverse(nodePoints_dst);
+
+        map_dst.put(srcWayPoint.getWayPointName(),nodePoints_dst);
+        map_src.put(dstWayPoint.getWayPointName(),nodePoints_src);
+
+        wayPoints.get(wayPoints.indexOf(srcWayPoint)).setCheckpointsPath(map_src);
+        wayPoints.get(wayPoints.indexOf(dstWayPoint)).setCheckpointsPath(map_dst);
+
+        return wayPoints;
+    }
+
 
 }
 

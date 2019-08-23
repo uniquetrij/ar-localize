@@ -16,10 +16,10 @@ public class WayPoint {
     private int id;
     private String wayPointName = null;
     private boolean isCheckpoint = false;
-    private Map<String, List<String>> checkpointsPath;
+    private Map<String, List<String>> checkpointsPath = new HashMap<String, List<String>>();
     private Node node;
     private Vector3 position;
-    private Set<WayPoint> connections;
+    private Set<WayPoint> connections = new HashSet<>();
     private boolean isSelected;
     private String type;
 
@@ -50,6 +50,9 @@ public class WayPoint {
 
     public Set<WayPoint> getConnections() {
         return connections;
+    }
+    public void setConnections(Set<WayPoint> connections) {
+        this.connections=connections;
     }
 
     public Vector3 getPosition() {
