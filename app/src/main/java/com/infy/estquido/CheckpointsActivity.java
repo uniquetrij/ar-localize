@@ -1,10 +1,12 @@
 package com.infy.estquido;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.PersistableBundle;
+import android.os.Vibrator;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -12,6 +14,13 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.app.Activity;
+import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -57,6 +66,10 @@ import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
+
+
+
+
 public class CheckpointsActivity extends AppCompatActivity {
 
 
@@ -80,11 +93,28 @@ public class CheckpointsActivity extends AppCompatActivity {
     private Quaternion prevCamRotation = null;
     private String wayPointName = "wayPoint_";
 
+    private SensorManager sensorManager;
+    private Sensor gyroscope;
+
+
+    private float deltaX = 0;
+    private float deltaY = 0;
+    private float deltaZ = 0;
+
+    private float vibrateThreshold = 0;
+
+    private TextView currentX, currentY, currentZ, maxX, maxY, maxZ;
+
+    public Vibrator v;
+
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkpoints);
         initialiseDB();
+
 
         mArFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.checkpoints_fragment);
 
@@ -103,7 +133,7 @@ public class CheckpointsActivity extends AppCompatActivity {
             if (anchor == null & !prevCamRotation.equals(mCamRotation) && !prevCamPosition.equals(mCamPosition)) {
                 createAnchor(mCamPosition, mCamRotation);
                 Log.d("anchor pos", mCamPosition.toString());
-                Log.d("anchor pos", mCamRotation.toString());
+                Log.d("sensor gyro pos", mCamRotation.toString());
                 Log.d("anchor pose", anchor.getPose().toString());
 
             }
@@ -115,6 +145,7 @@ public class CheckpointsActivity extends AppCompatActivity {
 
         });
     }
+
 
     private void initialiseDB() {
         DatabaseConfiguration config = new DatabaseConfiguration(getApplicationContext());
@@ -164,6 +195,7 @@ public class CheckpointsActivity extends AppCompatActivity {
 
     public void placeWayPoint(View view) {
         int id = ++wayPointCounter;
+
         Log.d("checkpoints_ waypoint counter", wayPointCounter + " ");
         mWayPoints.add(addWayPoint(id, mCamPosition, wayPointName + id, false));
         Log.d("anchor waypoints ", mWayPoints.toString());
@@ -283,7 +315,10 @@ public class CheckpointsActivity extends AppCompatActivity {
 
     public void syncPositions(View view) {
         view.setEnabled(false);
+
+        Log.d("once anchor",mWayPoints.size()+"");
         syncPositions();
+
         view.setEnabled(true);
     }
 

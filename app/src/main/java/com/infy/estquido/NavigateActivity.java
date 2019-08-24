@@ -77,7 +77,8 @@ public class NavigateActivity extends AppCompatActivity {
     private WayPoint selectedWayPoint;
 
     private int wayPointCounter = 0;
-    private Quaternion mRotation = null;
+    private Quaternion mRotation ;
+    private Vector3 mPosition ;
     private Database database;
     private MutableDocument document;
     private Quaternion mCamRotation;
@@ -107,7 +108,7 @@ public class NavigateActivity extends AppCompatActivity {
             }
 
             if (mAnchor == null & !prevCamRotation.equals(mCamRotation) && !prevCamPosition.equals(mCamPosition)) {
-                createAnchor(mCamRotation);
+                createAnchor(mCamPosition,mCamRotation);
 
             }
             if (mAnchor == null) {
@@ -260,19 +261,23 @@ public class NavigateActivity extends AppCompatActivity {
 
     }
 
-    public void createAnchor(Quaternion rotation) {
+    public void createAnchor(Vector3 position, Quaternion rotation) {
         mRotation=rotation;
-        mAnchor = mArFragment.getArSceneView().getSession().createAnchor(new Pose(new float[]{0, 0, 0}, new float[]{0, 0, 0, -rotation.w}));
+        mAnchor = mArFragment.getArSceneView().getSession().createAnchor(new Pose(new float[]{position.x, position.y, position.z}, new float[]{0, 0, 0, -rotation.w}));
 
     }
 
 
     public void syncPositions(View view) {
+        mArFragment.getArSceneView().getSession().getAllAnchors().forEach(anchor -> anchor.detach());
+        mAnchor=null;
+        mPosition = mCamPosition;
+        mRotation = mCamRotation;
 
         reset(null);
         view.setEnabled(false);
         if(mAnchor == null){
-            createAnchor(mRotation);
+            createAnchor(mPosition,mRotation);
         }
 
 
@@ -280,46 +285,46 @@ public class NavigateActivity extends AppCompatActivity {
         view.setEnabled(true);
 
 
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        reset(null);
-                        view.setEnabled(false);
-                        if(mAnchor == null){
-                            createAnchor(mRotation);
-                        }
-
-
-                        syncPositions("c2", "c1");
-                        view.setEnabled(true);
-                    }
-                });
-            }
-        }, 5000);
-
-
-        new Timer().schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        reset(null);
-                        view.setEnabled(false);
-                        if(mAnchor == null){
-                            createAnchor(mRotation);
-                        }
-
-
-                        syncPositions("c2", "c3");
-                        view.setEnabled(true);
-                    }
-                });
-            }
-        }, 10000);
+//        new Timer().schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        reset(null);
+//                        view.setEnabled(false);
+//                        if(mAnchor == null){
+//                            createAnchor(mCamPosition,mCamRotation);
+//                        }
+//
+//
+//                        syncPositions("c2", "c1");
+//                        view.setEnabled(true);
+//                    }
+//                });
+//            }
+//        }, 5000);
+//
+//
+//        new Timer().schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        reset(null);
+//                        view.setEnabled(false);
+//                        if(mAnchor == null){
+//                            createAnchor(mCamPosition,mCamRotation);
+//                        }
+//
+//
+//                        syncPositions("c2", "c3");
+//                        view.setEnabled(true);
+//                    }
+//                });
+//            }
+//        }, 10000);
     }
 
     public void syncPositions(String src, String dst) {
