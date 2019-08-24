@@ -3,7 +3,9 @@ package com.infy.estquido;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.Color;
+import android.location.Location;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.os.Vibrator;
@@ -50,6 +52,7 @@ import com.google.ar.sceneform.rendering.MaterialFactory;
 import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.ShapeFactory;
 import com.google.ar.sceneform.ux.ArFragment;
+import com.infy.estquido.app.services.EstquidoCBLService;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,18 +70,13 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 
-
-
-
 public class CheckpointsActivity extends AppCompatActivity {
 
 
     private static final String TAG = CheckpointsActivity.class.getName();
-    private static final String DB_NAME = "Estquido";
 
     private ArFragment mArFragment;
     private Vector3 mCamPosition;
-    private Vector3 calibPosition = Vector3.zero();
 
 
     private Set<WayPoint> mWayPoints = Collections.synchronizedSet(new LinkedHashSet<>());
@@ -93,26 +91,20 @@ public class CheckpointsActivity extends AppCompatActivity {
     private Quaternion prevCamRotation = null;
     private String wayPointName = "wayPoint_";
 
-    private SensorManager sensorManager;
-    private Sensor gyroscope;
-
-
-    private float deltaX = 0;
-    private float deltaY = 0;
-    private float deltaZ = 0;
-
-    private float vibrateThreshold = 0;
-
-    private TextView currentX, currentY, currentZ, maxX, maxY, maxZ;
-
-    public Vibrator v;
-
-
+    private String center;
+    private String building;
+    private Location location;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkpoints);
+
+        Intent intent = getIntent();
+        center = intent.getStringExtra("center");
+        building = intent.getStringExtra("building");
+        location = intent.getParcelableExtra("location");
+
         initialiseDB();
 
 
@@ -142,19 +134,17 @@ public class CheckpointsActivity extends AppCompatActivity {
                 prevCamRotation = mCamRotation;
             }
 
-
         });
     }
 
 
     private void initialiseDB() {
-        DatabaseConfiguration config = new DatabaseConfiguration(getApplicationContext());
         try {
-            database = new Database(DB_NAME, config);
-            Document doc = database.getDocument("B32F0");
+            database = EstquidoCBLService.getDatabase();
+            Document doc = database.getDocument("building_" + center + "_" + building);
 
             if (doc == null) {
-                document = new MutableDocument("B32F0");
+                document = new MutableDocument("building_" + center + "_" + building);
                 document.setValue("WayPoints", new ArrayList<Map<String, Object>>());
                 document.setValue("WayPointIDs", new ArrayList<Integer>(Arrays.asList(0)));
                 document.setValue("CheckPoints", new ArrayList<Map<String, Integer>>());
@@ -170,7 +160,7 @@ public class CheckpointsActivity extends AppCompatActivity {
                     mWayPoints.add(wayPoint);
                     newWayPoints.put(wayPoint.getWayPointName(), wayPoint);
                 });
-                wayPointCounter = ((MutableArray) document.getValue("WayPointIDs")).toList().stream().mapToInt(value -> ((Long) value).intValue()).max().getAsInt() - 1;
+                wayPointCounter = ((MutableArray) document.getValue("WayPointIDs")).toList().stream().mapToInt(value -> ((Long) value).intValue()).max().getAsInt();
 
                 ((MutableArray) document.getValue("WayPoints")).toList().stream().forEachOrdered(m -> {
                     Log.d("m", m.toString());
@@ -204,7 +194,7 @@ public class CheckpointsActivity extends AppCompatActivity {
     private WayPoint addWayPoint(Integer id, Vector3 position, String wayPointName, boolean isCheckpoint) {
 
         WayPoint wayPoint = new WayPoint(id, position, wayPointName, isCheckpoint);
-        Log.d("db1 waypoint name ",wayPointName);
+        Log.d("db1 waypoint name ", wayPointName);
         MaterialFactory.makeOpaqueWithColor(this, new com.google.ar.sceneform.rendering.Color(Color.parseColor("#FFBF00")))
                 .thenAccept(material -> {
                     ModelRenderable modelRenderable = ShapeFactory.makeSphere(0.1f, new Vector3(position.x, position.y, position.z), material);
@@ -316,7 +306,7 @@ public class CheckpointsActivity extends AppCompatActivity {
     public void syncPositions(View view) {
         view.setEnabled(false);
 
-        Log.d("once anchor",mWayPoints.size()+"");
+        Log.d("once anchor", mWayPoints.size() + "");
         syncPositions();
 
         view.setEnabled(true);
@@ -383,7 +373,7 @@ public class CheckpointsActivity extends AppCompatActivity {
             idArray.add(wayPoint.getId());
 
         });
-
+//        document.setValue("location", new Double[]{location.getLatitude(), location.getLongitude()});
         document.setValue("WayPoints", wpArray);
         document.setValue("WayPointIDs", idArray);
         document.setValue("CheckPoints", checkpointArray);
@@ -396,6 +386,13 @@ public class CheckpointsActivity extends AppCompatActivity {
         } catch (CouchbaseLiteException e) {
             e.printStackTrace();
         }
+
+        EstquidoCBLService.updateBuilding(center, building, new EstquidoCBLService.OnBuildingsFetchedCallback() {
+            @Override
+            public void onBuildingFetched(Map<String, Object> map) {
+
+            }
+        });
     }
 
     public void reset(View view) {
@@ -412,7 +409,7 @@ public class CheckpointsActivity extends AppCompatActivity {
     }
 
     public void calib(View view) {
-        calibPosition = mCamPosition;
+//        calibPosition = mCamPosition;
 
     }
 
